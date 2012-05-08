@@ -7,22 +7,76 @@
 //
 
 #import "AppDelegate.h"
+#import "MapPoint.h"
+
 
 @implementation AppDelegate
 
 @synthesize window = _window;
 
+- (void)findLocation {
+    [locationManager startUpdatingLocation];
+    [activityIndicator startAnimating];
+    [locationTitleField setHidden:YES];
+}
+
+- (void)foundLocation:(CLLocation *)loc {
+    CLLocationCoordinate2D coord = [loc coordinate];
+    
+    MapPoint *mp = [[MapPoint alloc] initWithCoordinate:coord title:[locationTitleField text]];
+    
+    [worldView addAnnotation:mp];
+    [mp release];
+    
+    MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(coord, 250, 250);
+    [worldView setRegion:region animated:YES];
+    
+    [locationTitleField setText:@""];
+    [activityIndicator stopAnimating];
+    [locationTitleField setHidden:NO];
+    [locationManager stopUpdatingLocation];
+}
+
 - (void)dealloc
 {
     [_window release];
+    if ([locationManager delegate] == self) {
+        [locationManager setDelegate:nil];
+    }
+    [locationManager release];
     [super dealloc];
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [self findLocation];
+    
+    [textField resignFirstResponder];
+    
+    return YES;
+}
+
+- (void)mapView:(MKMapView *)mapView didChangeUserTrackingMode:(MKUserTrackingMode)mode animated:(BOOL)animated {
+    
+}
+
+- (void) mapView:(MKMapView *)mapView didUpdateUserLocation:(MKUserLocation *)userLocation {
+    CLLocationCoordinate2D loc = [userLocation coordinate];
+    MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(loc, 250, 250);
+    [worldView setRegion:region animated:YES];
 }
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-    self.window = [[[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]] autorelease];
+    locationManager = [[CLLocationManager alloc] init];
+    [locationManager setDelegate:self];
+    [locationManager setDistanceFilter:kCLDistanceFilterNone];
+    [locationManager setDesiredAccuracy:kCLLocationAccuracyBest];
+    //[locationManager startUpdatingLocation];
+    [worldView setShowsUserLocation:YES];
+    
+    //self.window = [[[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]] autorelease];
     // Override point for customization after application launch.
-    self.window.backgroundColor = [UIColor whiteColor];
+    //self.window.backgroundColor = [UIColor whiteColor];
     [self.window makeKeyAndVisible];
     return YES;
 }
@@ -66,4 +120,27 @@
      */
 }
 
+- (void)locationManager:(CLLocationManager *)manager 
+    didUpdateToLocation:(CLLocation *)newLocation 
+           fromLocation:(CLLocation *)oldLocation {
+    NSLog(@"%@", newLocation);
+    
+    //How many seconds ago was this location created?
+    NSTimeInterval t = [[newLocation timestamp] timeIntervalSinceNow];
+    
+    //CLLocationManagers will return the last found location of the 
+    //device first, you don't want that data in this case
+    //If this location was made more than 3 minutes ago, ignore it
+    if (t < -180) {
+        //this is cached data, you don't want it, keep looking
+        return;
+    }
+    
+    [self foundLocation:newLocation];
+}
+
+- (void)locationManager:(CLLocationManager *)manager
+       didFailWithError:(NSError *)error {
+    NSLog(@"Could not find location: %@", error);
+}
 @end
